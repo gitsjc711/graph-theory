@@ -513,7 +513,6 @@ class GraphAlgorithmVisualizer:
         except Exception as e:
             messagebox.showerror("错误", f"生成随机图失败: {str(e)}")
 
-
     def run_algorithm(self):
         """运行选中的算法"""
         try:
@@ -589,16 +588,27 @@ class GraphAlgorithmVisualizer:
                     self.result_text.insert(tk.END, f"  到节点{self.node_labels[i]}: 不可达\n")
                 else:
                     self.result_text.insert(tk.END, f"  到节点{self.node_labels[i]}: {dist:.2f}\n")
-
         elif 'distance_matrix' in result:
             self.result_text.insert(tk.END, "所有节点对最短距离矩阵:\n")
             dist_matrix = result['distance_matrix']
-            for i in range(min(5, len(dist_matrix))):  # 只显示前5行
-                row = "  ".join(f"{dist_matrix[i][j]:6.1f}" if dist_matrix[i][j] != float('inf') else "   ∞  "
-                                for j in range(min(5, len(dist_matrix[i]))))
-                self.result_text.insert(tk.END, f"  {row}\n")
-            if len(dist_matrix) > 5:
-                self.result_text.insert(tk.END, f"  ... (显示前5行5列)\n")
+            n = len(dist_matrix)
+            max_display = min(10, n)
+            # 紧凑的表头
+            self.result_text.insert(tk.END, "    ")
+            for j in range(max_display):
+                self.result_text.insert(tk.END, f"{self.node_labels[j]:>5} ")
+            self.result_text.insert(tk.END, "\n")
+            # 紧凑的数据
+            for i in range(max_display):
+                self.result_text.insert(tk.END, f"{self.node_labels[i]:>2}: ")
+                for j in range(max_display):
+                    if dist_matrix[i][j] == float('inf') or i == j:
+                        self.result_text.insert(tk.END, "   ∞  ")
+                    else:
+                        self.result_text.insert(tk.END, f"{dist_matrix[i][j]:5.1f} ")
+                self.result_text.insert(tk.END, "\n")
+            if n > 10:
+                self.result_text.insert(tk.END, f"... (显示前{max_display}行{max_display}列)\n")
 
         elif 'matches' in result and result['matches']:
             self.result_text.insert(tk.END, "匹配结果:\n")
@@ -715,7 +725,6 @@ class GraphAlgorithmVisualizer:
                         for k in range(len(path) - 1):
                             u, v = path[k], path[k + 1]
                             self.highlight_single_edge(u, v, edge_list, edge_colors, edge_widths, 'green', 2.5)
-
 
         return edge_colors, edge_widths
 

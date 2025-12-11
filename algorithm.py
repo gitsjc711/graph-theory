@@ -8,6 +8,9 @@ def kruskal(adj_matrix):
     Kruskal算法实现最小生成树
     参数: adj_matrix - 邻接矩阵
     返回: dict - 包含MST边和总权重的字典
+    1.将邻接矩阵中的所有边按权重从小到大排序
+    2.依次选择边，如果这条边不会形成环（通过是否一队判断是否会成环），就加入最小生成树
+    3.直到选择了n-1条边（n为节点数）
     """
     n = len(adj_matrix)
 
@@ -23,6 +26,7 @@ def kruskal(adj_matrix):
     edges.sort(key=lambda x: x[0])
 
     # 并查集实现
+    # 初始化每个节点的父节点为自身
     parent = list(range(n))
 
     def find(x):
@@ -68,6 +72,10 @@ def prim(adj_matrix, start_node=0):
         adj_matrix - 邻接矩阵
         start_node - 起始节点索引（默认0）
     返回: dict - 包含MST边和总权重的字典
+    1.初始化，从指定的节点开始，设置所有的节点未被访问
+    2.寻找下一个顶点：在未访问的顶点中，找到 min_edge值最小的顶点 u。这个顶点是当前“距离”已生成部分树最近的顶点。
+    3.收录顶点：将顶点 u标记为已访问 (visited[u] = True)。将 u对应的 min_edge值累加到总权重 total_weight中。如果 u不是起始节点（即 parent[u] != -1），则将边 (parent[u], u, min_edge[u])加入结果边集 mst_edges。这条边就是连接 u到当前生成树的最小边。
+    4.更新邻居信息：遍历 u的所有邻居顶点 v。对于每个未被访问且与 u相连（权重有效且非零）的邻居，检查边 (u, v)的权重是否小于该邻居当前记录的 min_edge[v]。如果是，则更新 min_edge[v]为这个更小的权重，并设置 parent[v] = u，表示当前看来，v最好通过边 (u, v)加入生成树。
     """
     n = len(adj_matrix)
 
@@ -120,6 +128,10 @@ def break_cycle(adj_matrix):
     破圈法实现最小生成树
     参数: adj_matrix - 邻接矩阵
     返回: dict - 包含MST边和总权重的字典
+    1.在图中寻找环，并将访问过的环顶点标记为已访问，若已经访问则不进入递归。
+    2.寻找过程中记录当前环中的权重最大边，及其对应信息。
+    3.寻找环的过程闭合之后，去除最大边。
+    4.重复步骤1-3，直到图中不存在环为止。
     """
     n = len(adj_matrix)
 
@@ -183,6 +195,10 @@ def dijkstra(adj_matrix, start_node=0):
         adj_matrix - 邻接矩阵
         start_node - 起始节点索引（默认0）
     返回: dict - 包含最短路径和距离的字典
+    1.初始状态：只知道起点到自己的距离是0，到其他点的距离未知（视为无穷大）。
+    2.逐步扩张：每一轮都从尚未确定最短路径的顶点中，选择一个 距离起点最近的顶点。
+    3.松弛操作：将这个新确定的顶点作为“跳板”，检查是否能通过它来缩短起点到其邻居顶点的距离。如果能，就更新这个距离。
+    4.重复：重复步骤2和3，直到所有顶点的最短路径都被确定。
     """
     n = len(adj_matrix)
 
@@ -243,34 +259,48 @@ def dijkstra(adj_matrix, start_node=0):
 def floyd(adj_matrix):
     """
     Floyd算法实现所有节点对最短路径
-    注意: Floyd和Floyd-Warshall是同一种算法，这里提供两种实现方式
     参数: adj_matrix - 邻接矩阵
-    返回: dict - 包含最短路径距离矩阵的字典
+    返回: dict - 包含所有迭代阶段距离矩阵的字典
+    1. 定义D^(k)为经过前k个中间节点的最短距离矩阵
     """
     n = len(adj_matrix)
 
-    # 初始化距离矩阵
-    dist = adj_matrix.copy().astype(float)
+    # 初始化D^(0)：边权矩阵
+    D = [np.full((n, n), float('inf')) for _ in range(n + 1)]  # D[0]到D[n]
 
-    # 将0转换为inf（除了对角线）
+    # 初始化D^(0) = 原始邻接矩阵
     for i in range(n):
         for j in range(n):
-            if i != j:
-                if dist[i][j] == 0:
-                    dist[i][j] = float('inf')
+            if i == j:
+                D[0][i][j] = float('inf')
             else:
-                dist[i][j] = 0
-
-    # Floyd算法
-    for k in range(n):
+                weight = adj_matrix[i][j]
+                if weight == 0:
+                    D[0][i][j] = float('inf')  # 无边相连
+                else:
+                    D[0][i][j] = weight
+    # 动态规划递推：计算D^(1)到D^(n)
+    for k in range(1, n + 1):  # k表示中间节点编号（1-based）
+        for w in range(n):
+            for i in range(n):
+                for j in range(n):
+                    # 递推公式：d_ij^(k) = min(d_ij^(k-1), d_i(k-1)^(k-1) + d_(k-1)j^(k-1))
+                        through_k = D[k - 1][i][w] + D[0][w][j]
+                        original = D[k][i][j]
+                        D[k][i][j] = min(original, through_k)
+    result=np.full((n, n), float('inf'))
+    for k in range(n+1):
         for i in range(n):
             for j in range(n):
-                if dist[i][k] + dist[k][j] < dist[i][j]:
-                    dist[i][j] = dist[i][k] + dist[k][j]
+                if D[k][i][j]<result[i][j]:
+                    result[i][j]=D[k][i][j]
 
+
+
+    # 最终结果：D^(n)包含所有节点对的最短距离
     return {
         'algorithm': 'Floyd',
-        'distance_matrix': dist,
+        'distance_matrix': result,  # D^(n)是最终结果
         'node_count': n
     }
 
@@ -280,6 +310,7 @@ def floyd_warshall(adj_matrix):
     Floyd-Warshall算法实现所有节点对最短路径
     参数: adj_matrix - 邻接矩阵
     返回: dict - 包含最短路径距离矩阵和路径矩阵的字典
+    dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j])
     """
     n = len(adj_matrix)
 
