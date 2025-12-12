@@ -1,3 +1,5 @@
+from collections import deque
+
 import numpy as np
 
 
@@ -261,7 +263,10 @@ def floyd(adj_matrix):
     Floyd算法实现所有节点对最短路径
     参数: adj_matrix - 邻接矩阵
     返回: dict - 包含所有迭代阶段距离矩阵的字典
-    1. 定义D^(k)为经过前k个中间节点的最短距离矩阵
+    1.初始化D^(0)
+    2.定义D^(k)为第k次运算矩阵并初始化
+    3.计算D^(0)-D^(n)
+    4.
     """
     n = len(adj_matrix)
 
@@ -366,199 +371,238 @@ def floyd_warshall(adj_matrix):
 
 # ==================== 匹配算法 ====================
 
-def hungarian(cost_matrix):
+def is_bipartite_union_find(adj_matrix):
+    """
+    使用并查集判断图是否是二分图，并分别存储二分部位
+    参数: adj_matrix - 邻接矩阵
+    返回: (bool, list, list) - 是否是二分图，左部节点列表，右部节点列表
+    """
+    n = len(adj_matrix)
+    if n == 0:
+        return True, [], []
+
+    # 使用扩展域并查集，将每个节点i拆成两个：i（表示属于左部）和i+n（表示属于右部）
+    parent = list(range(2 * n))
+
+    def find(x):
+        if parent[x] != x:
+            parent[x] = find(parent[x])
+        return parent[x]
+
+    def union(x, y):
+        root_x, root_y = find(x), find(y)
+        if root_x != root_y:
+            parent[root_y] = root_x
+            return True
+        return False
+
+    # 构建邻接关系
+    edges = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            if adj_matrix[i][j] != 0:  # 有边连接
+                edges.append((i, j))
+
+    # 处理每条边
+    for u, v in edges:
+        # 如果u和v在同一个集合，说明不是二分图
+        if find(u) == find(v):
+            return False, [], []
+
+        # 将u与v+n合并，v与u+n合并
+        union(u, v + n)
+        union(v, u + n)
+
+    # 如果通过检查，提取左右部节点
+    left_nodes = []
+    right_nodes = []
+
+    for i in range(n):
+        if find(i) == find(0):  # 与0同组的节点
+            left_nodes.append(i)
+        else:
+            right_nodes.append(i)
+
+    return True, left_nodes, right_nodes
+
+def hungarian(adj_matrix):
     """
     匈牙利算法解决最大匹配问题（二分图最大权重匹配）
-    修正后的实现
-    """
-    n = len(cost_matrix)
-    m = len(cost_matrix[0]) if n > 0 else 0
+    1.随机生成初始匹配M
+    2.如果V1饱和则结束，否则进行3
+    3.在V1中找到非饱和点x，令S={x}，T=∅
+    4.若N(S)=T则停止，否则找到y∈N(S)-T
+    5.若y为饱和点转6，否则作一条x到y的M可增广路P，M=M⊕P转2
+    6.由于y为M的饱和点，所以M中有一条边(u,y)，使得S=S∪{u}，T=T∪{y}，转4
 
-    if n == 0 or m == 0:
+    参数: adj_matrix - 邻接矩阵
+    返回: dict - 包含匹配结果的字典
+    """
+    is_bipartite, left_nodes, right_nodes = is_bipartite_union_find(adj_matrix)
+    if not is_bipartite:
         return {
             'algorithm': '匈牙利算法',
-            'matching': {},
-            'matches': [],
-            'total_cost': 0,
-            'row_count': n,
-            'col_count': m
+            'error': '图不是二部图，匈牙利算法不适用',
+            'is_bipartite': False
         }
 
-    # 确保矩阵是方阵
-    size = max(n, m)
-    cost = np.full((size, size), 0, dtype=float)
-    cost[:n, :m] = cost_matrix
+    n = len(adj_matrix)
+    # 初始化匹配数组，创建空匹配
+    match = [-1] * n  # -1表示未匹配
 
-    # 转换为最小化问题（将求最大匹配转换为求最小匹配）
-    max_val = np.max(cost)
-    cost = max_val - cost[:size, :size]
+    # 定义DFS辅助函数：尝试为左部节点u寻找增广路径
+    def dfs(u, seen):
+        for v in range(n):  # 遍历所有可能的右部节点
+            # 检查边存在且v未被当前DFS访问
+            if adj_matrix[u][v] != 0 and not seen[v]:
+                seen[v] = True  # 标记v已访问
+                # 如果v未匹配，或v已匹配但其匹配点可重新匹配
+                if match[v] == -1 or dfs(match[v], seen):
+                    match[v] = u  # 更新匹配
+                    return True
+        return False
 
-    # 初始化
-    u = np.zeros(size + 1, dtype=float)  # 左侧顶点的势
-    v = np.zeros(size + 1, dtype=float)  # 右侧顶点的势
-    p = np.zeros(size + 1, dtype=int)  # 右侧顶点匹配的左侧顶点
-    way = np.zeros(size + 1, dtype=int)  # 路径
+    # 为每个左部节点尝试匹配
+    for u in left_nodes:
+        seen = [False] * n  # 重置访问标记
+        dfs(u, seen)
 
-    for i in range(1, size + 1):
-        p[0] = i
-        j0 = 0
-        minv = np.full(size + 1, float('inf'))
-        used = np.zeros(size + 1, dtype=bool)
-
-        while True:
-            used[j0] = True
-            i0 = p[j0]
-            delta = float('inf')
-            j1 = 0
-
-            for j in range(1, size + 1):
-                if not used[j]:
-                    cur = cost[i0 - 1][j - 1] - u[i0] - v[j]
-                    if cur < minv[j]:
-                        minv[j] = cur
-                        way[j] = j0
-                    if minv[j] < delta:
-                        delta = minv[j]
-                        j1 = j
-
-            for j in range(size + 1):
-                if used[j]:
-                    u[p[j]] += delta
-                    v[j] -= delta
-                else:
-                    minv[j] -= delta
-
-            j0 = j1
-            if p[j0] == 0:
-                break
-
-        # 增广
-        while True:
-            j1 = way[j0]
-            p[j0] = p[j1]
-            j0 = j1
-            if j0 == 0:
-                break
-
-    # 提取匹配结果
-    matching = {}
-    matches = []
-    total_cost = 0.0
-
-    for j in range(1, size + 1):
-        if p[j] != 0:
-            i = p[j] - 1
-            j_idx = j - 1
-            if i < n and j_idx < m:
-                matching[i] = j_idx
-                weight = cost_matrix[i][j_idx]
-                matches.append((i, j_idx, weight))
-                total_cost += weight
+    # 构建匹配结果列表 (左部节点, 右部节点)
+    matching_pairs = []
+    for v in range(n):
+        if match[v] != -1:
+            matching_pairs.append((match[v], v))
 
     return {
         'algorithm': '匈牙利算法',
-        'matching': matching,
-        'matches': matches,
-        'total_cost': total_cost,
-        'row_count': n,
-        'col_count': m
+        'is_bipartite': True,
+        'left_nodes': left_nodes,  # 左部节点列表
+        'right_nodes': right_nodes,  # 右部节点列表
+        'matches': matching_pairs,  # 匹配对列表
+        'matching_size': len(matching_pairs)  # 匹配大小
     }
 
 
-def kuhn_munkres(cost_matrix, is_max=True):
-    """
-    修正的Kuhn-Munkres算法
-    """
-    n = len(cost_matrix)
-    m = len(cost_matrix[0]) if n > 0 else 0
-
-    if n == 0 or m == 0:
-        return {
-            'algorithm': 'Kuhn-Munkres算法',
-            'matches': [],
-            'total_weight': 0,
-            'is_maximization': is_max,
-            'row_count': n,
-            'col_count': m
-        }
-
-    # 确保矩阵是方阵
-    size = max(n, m)
-    cost = np.full((size, size), 0, dtype=float)
-    cost[:n, :m] = cost_matrix
-
-    # 如果求最大匹配，转换为最小化问题
-    if is_max:
-        max_val = np.max(cost)
-        cost = max_val - cost
-
-    # 初始化
-    u = np.zeros(size, dtype=float)
-    v = np.zeros(size, dtype=float)
-    p = np.zeros(size, dtype=int) - 1
-    way = np.zeros(size, dtype=int) - 1
-
-    for i in range(size):
-        p[0] = i
-        j0 = 0
-        minv = np.full(size, float('inf'))
-        used = np.zeros(size, dtype=bool)
-
-        while True:
-            used[j0] = True
-            i0 = p[j0]
-            delta = float('inf')
-            j1 = 0
-
-            for j in range(1, size):
-                if not used[j]:
-                    cur = cost[i0][j] - u[i0] - v[j]
-                    if cur < minv[j]:
-                        minv[j] = cur
-                        way[j] = j0
-                    if minv[j] < delta:
-                        delta = minv[j]
-                        j1 = j
-
-            for j in range(size):
-                if used[j]:
-                    u[p[j]] += delta
-                    v[j] -= delta
-                else:
-                    minv[j] -= delta
-
-            j0 = j1
-            if p[j0] == -1:
-                break
-
-        while True:
-            j1 = way[j0]
-            p[j0] = p[j1]
-            j0 = j1
-            if j0 == 0:
-                break
-
-    # 提取结果
-    matches = []
-    total_weight = 0.0
-
-    for j in range(size):
-        if p[j] != -1:
-            i = p[j]
-            if i < n and j < m:
-                weight = cost_matrix[i][j]
-                matches.append((i, j, weight))
-                total_weight += weight
-
-    return {
-        'algorithm': 'Kuhn-Munkres算法',
-        'matches': matches,
-        'total_weight': total_weight,
-        'is_maximization': is_max,
-        'row_count': n,
-        'col_count': m
-    }
-
+# def kuhn_munkres(adj_matrix):
+#     """
+#     Kuhn-Munkres算法求解带权二分图的最大权匹配（完美匹配）
+#     1. 先验证图是二分图（使用is_bipartite_union_find）
+#     2. 扩展为完全二分图（左右节点数相等）
+#     3. 使用KM算法求解最大权匹配
+#
+#     参数: adj_matrix - 邻接矩阵（0表示无边，非0表示权重）
+#     返回: dict - 包含匹配结果的字典
+#     """
+#     # 1. 验证二分图
+#     is_bipartite, left_nodes, right_nodes = is_bipartite_union_find(adj_matrix)
+#     if not is_bipartite:
+#         return {
+#             'algorithm': 'Kuhn-Munkres',
+#             'error': '图不是二部图，KM算法不适用',
+#             'is_bipartite': False
+#         }
+#
+#     n_left = len(left_nodes)
+#     n_right = len(right_nodes)
+#     n = max(n_left, n_right)  # 扩展为完全二分图所需大小
+#
+#     # 2. 构建权重矩阵（n x n）
+#     # 将原图权重矩阵扩展为n x n，无边位置设为-10**9（表示不可选）
+#     # 注意：原图中0表示无边，非0表示权重（假设权重>=0）
+#     weight_matrix = [[-10 ** 9] * n for _ in range(n)]
+#
+#     # 填充原图权重
+#     for i in range(n_left):
+#         for j in range(n_right):
+#             # 注意：adj_matrix是原图邻接矩阵（全局节点）
+#             # 但left_nodes/right_nodes是二分部节点列表
+#             # 需要映射回全局节点索引
+#             global_i = left_nodes[i]
+#             global_j = right_nodes[j]
+#             if adj_matrix[global_i][global_j] != 0:
+#                 weight_matrix[i][j] = adj_matrix[global_i][global_j]
+#
+#     # 3. 补充虚拟节点（权重为0，表示可匹配但不增加权重）
+#     for i in range(n_left, n):
+#         for j in range(n):
+#             weight_matrix[i][j] = 0  # 左部虚拟节点
+#     for j in range(n_right, n):
+#         for i in range(n):
+#             weight_matrix[i][j] = 0  # 右部虚拟节点
+#
+#     # 4. KM算法核心实现
+#     # 初始化顶标
+#     u = [0] * n  # 左部顶标
+#     v = [0] * n  # 右部顶标
+#     p = [-1] * n  # p[j] = 匹配的左部节点
+#     way = [0] * n  # 用于记录路径
+#
+#     # 初始化左部顶标：u[i] = max(weight_matrix[i][j] for all j)
+#     for i in range(n):
+#         u[i] = max(weight_matrix[i])
+#
+#     for i in range(n):
+#         p[0] = i
+#         j0 = 0
+#         minv = [10 ** 9] * n  # 顶标调整最小值
+#         used = [False] * n  # 右部节点访问标记
+#
+#         # 交替路径搜索
+#         while True:
+#             used[j0] = True
+#             i0 = p[j0]
+#             delta = 10 ** 9
+#             j1 = 0
+#
+#             # 更新顶标调整值
+#             for j in range(1, n):
+#                 if not used[j]:
+#                     cur = u[i0] + v[j] - weight_matrix[i0][j]
+#                     if cur < minv[j]:
+#                         minv[j] = cur
+#                         way[j] = j0
+#                     if minv[j] < delta:
+#                         delta = minv[j]
+#                         j1 = j
+#
+#             # 调整顶标
+#             for j in range(n):
+#                 if used[j]:
+#                     u[p[j]] -= delta
+#                     v[j] += delta
+#                 else:
+#                     minv[j] -= delta
+#
+#             j0 = j1
+#             if p[j0] == -1:
+#                 break  # 找到增广路
+#
+#         # 回溯更新匹配
+#         while j0:
+#             j1 = way[j0]
+#             p[j0] = p[j1]
+#             j0 = j1
+#
+#     # 5. 构建匹配结果（过滤虚拟节点）
+#     matching_pairs = []
+#     total_weight = 0
+#     for j in range(n):
+#         if p[j] != -1 and p[j] < n_left and j < n_right:
+#             # 映射回原图节点
+#             u_node = left_nodes[p[j]]
+#             v_node = right_nodes[j]
+#             matching_pairs.append((u_node, v_node, weight_matrix[p[j]][j]))
+#             total_weight += weight_matrix[p[j]][j]
+#
+#     return {
+#         'algorithm': 'Kuhn-Munkres',
+#         'is_bipartite': True,
+#         'left_nodes': left_nodes,
+#         'right_nodes': right_nodes,
+#         'matches': matching_pairs,
+#         'total_weight': total_weight,
+#         'matching_size': len(matching_pairs)
+#     }
 
 # ==================== 工具函数 ====================
 

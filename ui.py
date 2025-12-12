@@ -36,7 +36,7 @@ except ImportError as e:
         return {"error": "算法函数未找到"}
 
 
-    kruskal = prim = break_cycle = dijkstra = floyd = floyd_warshall = hungarian = kuhn_munkres = dummy_algorithm
+    kruskal = prim = break_cycle = dijkstra = floyd = floyd_warshall = hungarian  = dummy_algorithm
 
 
 def setup_chinese_font():
@@ -140,8 +140,7 @@ class GraphAlgorithmVisualizer:
             "Dijkstra算法",
             "Floyd算法",
             "Floyd-Warshall算法",
-            "匈牙利算法",
-            "Kuhn-Munkres算法"
+            "匈牙利算法"
         ]
 
         algorithm_combo = ttk.Combobox(parent, textvariable=self.algorithm_var,
@@ -547,8 +546,8 @@ class GraphAlgorithmVisualizer:
                 result = floyd_warshall(self.adj_matrix)
             elif algorithm_name == "匈牙利算法":
                 result = hungarian(self.adj_matrix)
-            elif algorithm_name == "Kuhn-Munkres算法":
-                result = kuhn_munkres(self.adj_matrix)
+            # elif algorithm_name == "Kuhn-Munkres算法":
+            #     result = kuhn_munkres(self.adj_matrix)
             else:
                 messagebox.showerror("错误", "请选择一个算法！")
                 return
@@ -576,7 +575,10 @@ class GraphAlgorithmVisualizer:
         if 'total_weight' in result:
             self.result_text.insert(tk.END, f"总权重: {result['total_weight']:.2f}\n\n")
 
-        if 'edges' in result and result['edges']:
+        if 'error' in result and result['error']:
+            self.result_text.insert(tk.END, "错误:\n")
+            self.result_text.insert(tk.END, result['error'])
+        elif 'edges' in result and result['edges']:
             self.result_text.insert(tk.END, "最小生成树边:\n")
             for u, v, w in result['edges']:
                 self.result_text.insert(tk.END, f"  {self.node_labels[u]} - {self.node_labels[v]}: {w}\n")
@@ -612,8 +614,8 @@ class GraphAlgorithmVisualizer:
 
         elif 'matches' in result and result['matches']:
             self.result_text.insert(tk.END, "匹配结果:\n")
-            for u, v, w in result['matches']:
-                self.result_text.insert(tk.END, f"  {self.node_labels[u]} ←→ {self.node_labels[v]}: 权重 {w}\n")
+            for u, v in result['matches']:  # 只取两个元素 (u, v)，不再需要 w
+                self.result_text.insert(tk.END, f"  {self.node_labels[u]} ←→ {self.node_labels[v]}\n")
 
     def visualize_algorithm_result(self, result):
         """可视化算法结果"""
