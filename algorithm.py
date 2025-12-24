@@ -130,55 +130,89 @@ def break_cycle(adj_matrix):
     破圈法实现最小生成树
     参数: adj_matrix - 邻接矩阵
     返回: dict - 包含MST边和总权重的字典
-    1.在图中寻找环，并将访问过的环顶点标记为已访问，若已经访问则不进入递归。
+    1.从大到小排序边
     2.寻找过程中记录当前环中的权重最大边，及其对应信息。
-    3.寻找环的过程闭合之后，去除最大边。
+    3.尝试删除最大边，如果不连通就加回来，如果连通则删除该边。
     4.重复步骤1-3，直到图中不存在环为止。
     """
+
+    # 构建邻接表用于DFS检查连通性
     n = len(adj_matrix)
 
-    # 收集所有边并降序排序（先移除权重大的边）
+    # 1. 收集所有边
     edges = []
     for i in range(n):
-        for j in range(i + 1, n):  # 无向图
+        for j in range(i + 1, n):
             weight = adj_matrix[i][j]
             if weight != 0 and weight != float('inf'):
                 edges.append((weight, i, j))
 
+    # 按权重从大到小排序
     edges.sort(reverse=True, key=lambda x: x[0])
 
-    # 使用并查集构建MST
-    parent = list(range(n))
+    # 构建邻接表用于DFS检查连通性
+    def build_graph(edge_list):
+        graph = [[] for _ in range(n)]
+        for weight, u, v in edge_list:
+            graph[u].append((v, weight))
+            graph[v].append((u, weight))
+        return graph
 
-    def find(x):
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-
-    def union(x, y):
-        root_x, root_y = find(x), find(y)
-        if root_x != root_y:
-            parent[root_y] = root_x
+    def is_connected(graph):
+        """使用DFS检查图是否连通"""
+        if n == 0:
             return True
-        return False
 
-    # 构建MST边列表
+        visited = [False] * n
+
+        def dfs(node):
+            visited[node] = True
+            for neighbor, _ in graph[node]:
+                if not visited[neighbor]:
+                    dfs(neighbor)
+
+        # 从节点0开始DFS
+        dfs(0)
+
+        # 检查是否所有节点都被访问
+        return all(visited)
+
+    # 初始图包含所有边
+    current_edges = edges.copy()
+
+    # 尝试删除每条边（从大到小）
+    for i in range(len(edges)):
+        weight, u, v = edges[i]
+
+        # 如果这条边已经在之前的删除操作中被移除了，跳过
+        if (weight, u, v) not in current_edges:
+            continue
+
+        # 临时删除这条边
+        temp_edges = current_edges.copy()
+        temp_edges.remove((weight, u, v))
+
+        # 构建临时图
+        temp_graph = build_graph(temp_edges)
+
+        # 检查删除后是否仍然连通
+        if is_connected(temp_graph):
+            # 如果连通，永久删除这条边
+            current_edges = temp_edges
+
+    # 如果边数多于n-1，再进一步处理（理论上不会发生）
+    if len(current_edges) > n - 1:
+        # 按权重从小到大排序，保留最小的n-1条边
+        current_edges.sort(key=lambda x: x[0])
+        current_edges = current_edges[:n - 1]
+
+    # 计算总权重
+    total_weight = sum(weight for weight, _, _ in current_edges)
+
+    # 格式化边
     mst_edges = []
-    total_weight = 0
-
-    # 按权重从大到小遍历边
-    for weight, u, v in edges:
-        # 尝试连接u和v
-        if union(u, v):
-            # 如果连接成功，说明不会形成环，加入MST
-            mst_edges.append((u, v, weight))
-            total_weight += weight
-
-    # 破圈法需要保留n-1条边，所以取前n-1条边
-    if len(mst_edges) > n - 1:
-        mst_edges = mst_edges[:n - 1]
-        # 重新计算总权重
-        total_weight = sum(edge[2] for edge in mst_edges)
+    for weight, u, v in current_edges:
+        mst_edges.append((u, v, weight))
 
     return {
         'algorithm': '破圈法',

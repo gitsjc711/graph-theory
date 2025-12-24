@@ -22,7 +22,7 @@ try:
     from algorithm import (
         kruskal, prim, break_cycle,
         dijkstra, floyd, floyd_warshall,
-        hungarian, kuhn_munkres
+        hungarian
     )
 
     print("成功导入算法模块")
